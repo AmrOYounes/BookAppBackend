@@ -5,9 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Publisher extends Model
+class Bookfile extends Model
 {
-    protected $primaryKey = 'id';
-    protected $fillable = ['Publisher_name','Establish_date','Is_working'];
+    protected $fillable = ['Book_path','Book_id'];
     use HasFactory;
 }

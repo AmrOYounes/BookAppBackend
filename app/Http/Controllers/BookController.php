@@ -6,6 +6,7 @@ use App\Exports\BooksExport;
 use App\Exports\OrdersExport;
 use App\Models\Author;
 use App\Models\Book;
+use App\Models\Bookfile;
 use App\Models\Order;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Models\Publisher;
@@ -61,28 +62,68 @@ class BookController extends Controller
 
     public function addBook(Request $request){
 
-//  print_r($request->file('Book_path'));
-        $store_path = 'public/uploads';
-        $file = $request->file('Book_path');
-        $name = $file->getClientOriginalName();
-//        $ext = $file->getClientOriginalExtension();
-        $path = $file->storeAs($store_path, $name);
-
-       $newBook =  Book::create([
-            'Book_id' => $request->Book_id,
-            'Book_title' => $request->Book_title,
-            'Book_publisher' => $request->Book_publisher,
-            'Publish_date' => $request->Publish_date,
-            'Book_author' => $request->Book_author,
-            'Book_path' => $path,
-            'Available_units' => $request->Available_units,
-             'Unit_price' => $request->Unit_price,
+        $validated = $request->validate([
+            'Book_id' => 'required',
+            'Book_title' => 'required',
+            'publisher_Id' => 'required',
+            'Publish_date' => 'required',
+            'author_Id' => 'required',
+            'Available_units' => 'required',
+            'Unit_price' => 'required',
         ]);
 
-       Tag::create([
-          'Tag_name' => $request->tags,
-           'Book_id'=> $newBook->Book_id,
-       ]);
+        $newBook =  Book::create([
+            'Book_id' => $request->Book_id,
+            'Book_title' => $request->Book_title,
+            'publisher_Id' => $request->publisher_Id,
+            'Publish_date' => $request->Publish_date,
+            'author_Id' => $request->author_Id,
+            'Available_units' => $request->Available_units,
+            'Unit_price' => $request->Unit_price,
+        ]);
+
+
+
+//  print_r($request->file('Book_path'));
+        $store_path = 'public/uploads';
+//        $file = $request->file('Book_path');
+//        $name = $file->getClientOriginalName();
+//        $ext = $file->getClientOriginalExtension();
+//        $path = $file->storeAs($store_path, $name);
+//          dd($request->file('Book_path'));
+        if($request->hasfile('Book_path'))
+        {
+
+            foreach($request->file('Book_path') as $file)
+            {
+                $name =$file->getClientOriginalName();
+                 $ext = $file->getClientOriginalExtension();
+                 $fileNameWithExt = $name.'.'.$ext;
+                $path = $file->storeAs($store_path, $name);
+
+                Bookfile::create([
+                    'Book_path' => $path,
+                    'Book_id' => $newBook->Book_id,
+                ]);
+            }
+        }
+
+        if(isset($request->tags)){
+           foreach ($request->tags as $tag){
+               Tag::create([
+                   'Tag_name' => $tag,
+                   'Book_id'=> $newBook->Book_id,
+               ]);
+           }
+
+        }
+
+
+//
+//       Tag::create([
+//          'Tag_name' => $request->tags,
+//           'Book_id'=> $newBook->Book_id,
+//       ]);
 
         return response()->json(['success' => true], 201);
     }
@@ -135,110 +176,184 @@ class BookController extends Controller
             'Book Publisher' => 'Book_publisher',
             'Book Author' => 'Book_author',
             'Buyer name' => 'buyerName',
+        ];
+        $searchData = null;
+        if( $request->column_filter == 'Any') {
+            $searchData = Order::with('book', 'book.author', 'book.publisher')->
+            where('numberOfUnits', 'LIKE', '%' . $request->search_by_word . '%')
+                ->orWhere('buyerName', 'LIKE', '%' . $request->search_by_word . '%')
+                ->orWhere('totalPrice', 'LIKE', '%' . $request->search_by_word . '%')
+                ->orWhereHas('book', function ($query) use ($request) {
+                    $query->where('Book_id', 'LIKE', '%' . $request->search_by_word . '%')
+                        ->orWhere('Book_title', 'LIKE', '%' . $request->search_by_word . '%');
+                })->orWhereHas('book.publisher', function ($query) use ($request) {
+                    $query->where('Publisher_name', 'LIKE', '%' . $request->search_by_word . '%');
+
+                })->orWhereHas('book.author', function ($query) use ($request) {
+                    $query->where('First_name', 'LIKE', '%' . $request->search_by_word . '%')
+                        ->orWhere('Middle_name', 'LIKE', '%' . $request->search_by_word . '%')
+                        ->orWhere('Last_name', 'LIKE', '%' . $request->search_by_word . '%');
+                });
+            if (isset($request->purchaseDate)) {
+                $searchData = $searchData->where('purchaseDate', $request->purchaseDate);
+            }
+            return response()->json(['data' => $searchData->paginate(4)], 200);
+
+        }
+
+
+        elseif ($searchFilter[$request->column_filter] == 'buyerName'){
+            $searchData = Order::with('book','book.author','book.publisher')->
+                where('buyerName','LIKE','%'.$request->search_by_word.'%');
+
+            if(isset($request->purchaseDate)){
+                $searchData= $searchData->where('purchaseDate',$request->purchaseDate);
+            }
+            return response()->json(['data' => $searchData->paginate(4)], 200);
+        }
+
+
+        elseif ($searchFilter[$request->column_filter] == 'Book_title'){
+            $searchData = Order::with('book','book.author','book.publisher')->
+            whereHas('book', function ($query) use($request){
+                $query->where('Book_title','LIKE','%'.$request->search_by_word.'%');
+            });
+
+            if(isset($request->purchaseDate)){
+                $searchData= $searchData->where('purchaseDate',$request->purchaseDate);
+            }
+            return response()->json(['data' => $searchData->paginate(4)], 200);
+        }
+
+
+        elseif ($searchFilter[$request->column_filter] == 'Book_publisher'){
+            $searchData = Order::with('book','book.author','book.publisher')->
+            whereHas('book.publisher', function ($query) use($request){
+                $query->where('Publisher_name','LIKE','%'.$request->search_by_word.'%');
+            });
+
+            if(isset($request->purchaseDate)){
+                $searchData= $searchData->where('purchaseDate',$request->purchaseDate);
+            }
+            return response()->json(['data' => $searchData->paginate(4)], 200);
+        }
+
+        else{
+            $searchData = Order::with('book','book.author','book.publisher')->
+            whereHas('book.author', function ($query) use($request){
+                $query->where('First_name','LIKE','%'.$request->search_by_word.'%')
+                ->orWhere('Middle_name','LIKE','%'.$request->search_by_word.'%')
+                ->orWhere('Last_name','LIKE','%'.$request->search_by_word.'%');
+            });
+
+            if(isset($request->purchaseDate)){
+                $searchData= $searchData->where('purchaseDate',$request->purchaseDate);
+            }
+            return response()->json(['data' => $searchData->paginate(4)], 200);
+        }
+    }
+
+    public function search(Request $request)
+    {
+        $searchFilter = [
+            'Book title' => 'Book_title',
+            'Book Publisher' => 'Book_publisher',
+            'Book Author' => 'Book_author',
+            'tags' => 'Tag_name',
 
         ];
-        if( $request->column_filter == 'Any'){
-            $order = Order::with('book')
-                           ->where('buyerName','LIKE','%'.$request->search_by_word.'%')
-                           ->where('purchaseDate',$request->purchaseDate)
-                          ->orWhereHas('book', function ($query) use($request) {
-                              $query->where('Book_title','LIKE','%'.$request->search_by_word.'%')
-                               ->orWhere('Book_publisher','LIKE','%'.$request->search_by_word.'%')
-                               ->orWhere('Book_author','LIKE','%'.$request->search_by_word.'%');
-                          })->paginate(4);
-            return response()->json(['data' => $order],200);
+        $validated = $request->validate([
+            'search_by_word' => 'required',
+            'column_filter' => 'required',
+        ]);
+        if ($request->column_filter == 'Any') {
 
-    }
-        elseif ($searchFilter[$request->column_filter] == 'Book_title' ||
-                $searchFilter[$request->column_filter]== 'Book_publisher' ||
-                $searchFilter[$request->column_filter] == 'Book_author'
-               ){
-            $orders = Order::with('book')->where('purchaseDate',$request->purchaseDate)
-                ->whereHas('book',function ($query) use($searchFilter, $request){
-                  $query->where($searchFilter[$request->column_filter],$request->search_by_word);
+            $result = Book::with('publisher', 'author', 'tag')
+                ->where('Book_id', 'LIKE', '%' . $request->search_by_word . '%')
+                ->orWhere('Book_title', 'LIKE', '%' . $request->search_by_word . '%')
+                ->orWhere('Publish_date', 'LIKE', '%' . $request->search_by_word . '%')
+                ->orWhereHas('publisher', function ($query) use ($request) {
+                    $query->where('Publisher_name', 'LIKE', '%' . $request->search_by_word . '%');
+                })->orWhereHas('author', function ($query) use ($request) {
+                    $query->where('First_name', 'LIKE', '%' . $request->search_by_word . '%')
+                        ->orWhere('Middle_name', 'LIKE', '%' . $request->search_by_word . '%')
+                        ->orWhere('Last_name', 'LIKE', '%' . $request->search_by_word . '%');
+                })->orWhereHas('tag', function ($query) use ($request) {
+                    $query->where('Tag_name', 'LIKE', '%' . $request->search_by_word . '%');
                 })->paginate(4);
-            return response()->json(['data' => $orders],200);
-        }
-        else {
-          $orders = Order::with('book')->where( $searchFilter[$request->column_filter],$request->search_by_word)
-                      ->where('purchaseDate',$request->purchaseDate)->paginate(4);
-            return response()->json(['data' => $orders],200);
-        }
-    }
 
-    public function search(Request $request) {
-         $searchFilter = [
-              'Book title' => 'Book_title',
-              'Book Publisher' => 'Book_publisher',
-             'Book Author' => 'Book_author',
-             'tags' => 'Tag_name',
 
-        ];
-     $validated = $request->validate([
-         'search_by_word' => 'required',
-         'column_filter' => 'required',
-     ]);
-      if( $request->column_filter == 'Any'){
-          $book_columns = Schema::getColumnListing('books');
-          $exclude_columns = [
-              'Unit_price',
-              'Available_units',
-              'created_at',
-              'updated_at',
-               'id',
-          ];
-
-          $select = array_diff($book_columns, $exclude_columns);
-          $result = Book::with('tag')
-              ->where('Book_id', 'LIKE', '%'.$request->search_by_word.'%')
-              ->orWhere('Book_title',  'LIKE', '%'.$request->search_by_word.'%')
-              ->orWhere('Book_publisher',  'LIKE', '%'.$request->search_by_word.'%')
-              ->orWhere('Publish_date',  'LIKE', '%'.$request->search_by_word.'%')
-              ->orWhere('Book_author',  'LIKE', '%'.$request->search_by_word.'%')
-              ->orWhereHas('tag', function ($query) use($request) {
-                  $query->where('Tag_name', 'LIKE', '%'.$request->search_by_word.'%');
-              })->paginate(4);
-
-            $this->dataToExport = $result;
-
-          return response()->json(['data' => $result],200);
+            return response()->json(['data' => $result], 200);
 
 //         $book = Book::with('tag')->where()
 
-
-
-      }
-      elseif ($request->column_filter == 'tags'){
-          $book = Book::with('tag')
-              ->where('Available_units','LIKE',$request->unit_start. '%' .$request->unit_end)
-              ->where('Unit_price','LIKE',$request->price_start. '%' .$request->price_end)
-              ->whereHas('tag',function ($query) use ($request){
-              $query->where('Tag_name', 'LIKE', '%'.$request->search_by_word.'%');
-            })->paginate(4);
-          $this->dataToExport = $book;
-
-          return response()->json(['data' => $book],200);
-      }
-      else{
-          $book = Book::with('tag')
-              ->where($searchFilter[$request->column_filter],$request->search_by_word)
-              ->where('Available_units','LIKE',$request->unit_start. '%' .$request->unit_end)
-              ->where('Unit_price','LIKE',$request->price_start. '%' .$request->price_end)
-              ->paginate(4);
-
-          $this->dataToExport = $book;
-
-            return response()->json(['data' => $book],200);
-      }
-
+        } elseif ($request->column_filter == 'tags') {
+            $queryData = null;
+            $queryData = Book::with('publisher', 'author', 'tag')
+//              ->where('Available_units','LIKE',$request->unit_start. '%' .$request->unit_end)
+//              ->where('Unit_price','LIKE',$request->price_start. '%' .$request->price_end)
+                ->whereHas('tag', function ($query) use ($request) {
+                    $query->where('Tag_name', 'LIKE', '%' . $request->search_by_word . '%');
+                });
+            if (isset($request->unit_start)) {
+//              dd($queryData);
+                $queryData = $queryData->whereBetween('Available_units', [$request->unit_start, $request->unit_end]);
+            }
+            if (isset($request->price_start)) {
+                $queryData = $queryData->whereBetween('Unit_price', [$request->price_start, $request->price_end]);
+            }
+            return response()->json(['data' => $queryData->paginate(4)], 200);
+        } elseif ($searchFilter[$request->column_filter] === 'Book_title') {
+            $queryData = null;
+            $queryData = Book::with('publisher', 'author', 'tag')
+                ->where('Book_title', 'LIKE', '%' . $request->search_by_word . '%');
+            if (isset($request->unit_start)) {
+//              dd($queryData);
+                $queryData = $queryData->whereBetween('Available_units', [$request->unit_start, $request->unit_end]);
+            }
+            if (isset($request->price_start)) {
+                $queryData = $queryData->whereBetween('Unit_price', [$request->price_start, $request->price_end]);
+            }
+            return response()->json(['data' => $queryData->paginate(4)], 200);
+        } elseif ($searchFilter[$request->column_filter] === 'Book_publisher') {
+            $queryData = null;
+            $queryData = Book::with('publisher', 'author', 'tag')
+                ->whereHas('publisher', function ($query) use ($request) {
+                    $query->where('Publisher_name', 'LIKE', '%' . $request->search_by_word . '%');
+                });
+            if (isset($request->unit_start)) {
+//              dd($queryData);
+                $queryData = $queryData->whereBetween('Available_units', [$request->unit_start, $request->unit_end]);
+            }
+            if (isset($request->price_start)) {
+                $queryData = $queryData->whereBetween('Unit_price', [$request->price_start, $request->price_end]);
+            }
+            return response()->json(['data' => $queryData->paginate(4)], 200);
+        } else {
+            $queryData = null;
+            $queryData = Book::with('publisher', 'author', 'tag')
+                ->whereHas('author', function ($query) use ($request) {
+                    $query->where('First_name', 'LIKE', '%' . $request->search_by_word . '%')
+                        ->orWhere('Middle_name', 'LIKE', '%' . $request->search_by_word . '%')
+                        ->orWhere('Last_name', 'LIKE', '%' . $request->search_by_word . '%');
+                });
+            if (isset($request->unit_start)) {
+//              dd($queryData);
+                $queryData = $queryData->whereBetween('Available_units', [$request->unit_start, $request->unit_end]);
+            }
+            if (isset($request->price_start)) {
+                $queryData = $queryData->whereBetween('Unit_price', [$request->price_start, $request->price_end]);
+            }
+            return response()->json(['data' => $queryData->paginate(4)], 200);
+        }
     }
 
     public function searchBuyIdOrTitle (Request $request) {
         $book = null;
         if($request->BOOK_id && $request->BOOK_id !=''){
-            $book = Book::where('BOOK_id','LIKE' ,'%'.$request->BOOK_id.'%' )->get();
+            $book = Book::with('publisher','author')->where('BOOK_id','LIKE' ,'%'.$request->BOOK_id.'%' )->get();
         }else{
-            $book = Book::where('Book_title','LIKE','%'.$request->Book_title.'%')->get();
+            $book = Book::with('publisher','author')->where('Book_title','LIKE','%'.$request->Book_title.'%')->get();
         }
 
 

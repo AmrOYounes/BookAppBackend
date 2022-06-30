@@ -17,25 +17,24 @@ class Book extends Model
     protected $fillable = [
         'Book_id',
         'Book_title',
-        'Book_publisher',
+        'publisher_Id',
         'Publish_date',
-        'Book_author',
-        'Book_path',
+        'author_Id',
         'Available_units',
         'Unit_price',
         ];
     use HasFactory;
 
     public function author(){
-        return $this->hasOne(Author::class);
+        return $this->belongsTo(Author::class,'author_Id');
     }
 
     public function publisher(){
-        return $this->hasOne(Publisher::class);
+        return $this->belongsTo(Publisher::class,'publisher_Id');
     }
 
     public function tag(){
-        return $this->hasOne(Tag::class,'Book_id','Book_id');
+        return $this->hasMany(Tag::class,'Book_id');
     }
 
 

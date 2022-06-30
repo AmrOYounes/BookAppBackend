@@ -13,11 +13,12 @@ return new class extends Migration
      */
     public function up()
     {
-        Schema::table('books', function (Blueprint $table) {
-            //
-            $table->string('Available_units')->change();
-            $table->string('Unit_price')->change();
-
+        Schema::create('bookfiles', function (Blueprint $table) {
+            $table->id();
+            $table->string('Book_path');
+            $table->unsignedBigInteger('Book_id');
+            $table->foreign('Book_id')->references('Book_id')->on('books');
+            $table->timestamps();
         });
     }
 
@@ -28,8 +29,6 @@ return new class extends Migration
      */
     public function down()
     {
-        Schema::table('books', function (Blueprint $table) {
-            //
-        });
+        Schema::dropIfExists('bookfiles');
     }
 };
