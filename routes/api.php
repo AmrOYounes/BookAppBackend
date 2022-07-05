@@ -26,10 +26,14 @@ Route::middleware('auth:api')->group( function (){
     Route::post('/addOrder',[\App\Http\Controllers\BookController::class,'addOrder']);
     Route::get('/export',[\App\Http\Controllers\BookController::class,'export']);
     Route::get('/Ordersexport',[\App\Http\Controllers\BookController::class,'Ordersexport']);
+    Route::post('/logout',[\App\Http\Controllers\AuthController::class,'logout']);
+
 
 });
 Route::post('/login',[\App\Http\Controllers\AuthController::class,'login']);
 Route::post('/signup',[\App\Http\Controllers\AuthController::class,'signup']);
+
+
 
 
 

@@ -6,6 +6,8 @@ use App\Models\Publisher;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Session;
+
 
 class AuthController extends Controller
 {
@@ -42,6 +44,7 @@ class AuthController extends Controller
             $response = [
                 'success' => true,
                 'accessToken' => $token,
+                'userName' => $user->name,
             ];
            return response()->json($response,200);
         }else{
@@ -53,5 +56,10 @@ class AuthController extends Controller
 
     }
 
+    public function logout(Request $request){
+        $token = $request->user()->token();
+        $token->revoke();
+        return response(['message' => 'You have been successfully logged out.'], 200);
+    }
 
 }
